@@ -6,11 +6,13 @@ import "hardhat/console.sol";
 import "./interfaces/IProofOfHumanitySemaphore.sol";
 import "./interfaces/IProofOfHumanity.sol";
 import "./interfaces/ISemaphore.sol";
+import "./interfaces/IVerifier.sol";
 
 contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
     uint256 deregisteringIncentive;
     IProofOfHumanity proofOfHumanity;
     ISemaphore semaphore;
+    IVerifier nullifierConsistencyVerifier;
     uint256 public semaphoreGroupId;
     mapping(address => uint256) registeredIdentityCommitments;
 
@@ -18,11 +20,13 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
         uint256 _deregisteringIncentive,
         IProofOfHumanity _proofOfHumanity,
         ISemaphore _semaphore,
+        IVerifier _nullifierConsistencyVerifier,
         uint256 _semaphoreGroupId
     ) {
         deregisteringIncentive = _deregisteringIncentive;
         proofOfHumanity = _proofOfHumanity;
         semaphore = _semaphore;
+        nullifierConsistencyVerifier = _nullifierConsistencyVerifier;
         semaphoreGroupId = _semaphoreGroupId;
     }
 
@@ -82,9 +86,20 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
         uint256 nullifierHash,
         uint256 serviceNullifier,
         uint256 externalNullifier,
-        uint256[8] calldata serviceNullifierProof,
+        uint256 identityProxy,
+        uint256[8] calldata nullifierConsistencyProof,
         uint256[8] calldata semaphoreProof
     ) external {
+        bool isConsistent = verifyNullifierConsistencyProof(
+            serviceNullifier,
+            identityProxy,
+            externalNullifier,
+            nullifierHash,
+            nullifierConsistencyProof
+        );
+        if (!isConsistent) {
+            revert ProofOfHumanitySemaphore__InconsistentNullifiers();
+        }
         semaphore.verifyProof(
             semaphoreGroupId,
             signal,
@@ -92,5 +107,33 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
             externalNullifier,
             semaphoreProof
         );
+        emit ProofVerified(
+            signal,
+            nullifierHash,
+            serviceNullifier,
+            externalNullifier,
+            identityProxy
+        );
+    }
+
+    function verifyNullifierConsistencyProof(
+        uint256 serviceNullifier,
+        uint256 identityProxy,
+        uint256 externalNullifier,
+        uint256 nullifierHash,
+        uint256[8] calldata proof
+    ) private view returns (bool) {
+        return
+            nullifierConsistencyVerifier.verifyProof(
+                [proof[0], proof[1]],
+                [[proof[2], proof[3]], [proof[4], proof[5]]],
+                [proof[6], proof[7]],
+                [
+                    serviceNullifier,
+                    identityProxy,
+                    externalNullifier,
+                    nullifierHash
+                ]
+            );
     }
 }

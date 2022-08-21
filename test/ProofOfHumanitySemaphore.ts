@@ -5,8 +5,39 @@ import {
   IProofOfHumanity__factory,
   ISemaphore__factory,
 } from "../typechain-types";
+// @ts-ignore
+import { groth16 } from "snarkjs";
 
 const { deployMockContract } = waffle;
+
+interface NullifierConsistencyProofInput {
+  serviceNullifier: string;
+  privIdentityNullifier: string;
+  privRandomNonce: string;
+  identityProxy: string;
+  externalNullifier: string;
+  nullifierHash: string;
+}
+
+async function proveNullifierConsistency(
+  input: NullifierConsistencyProofInput
+) {
+  const { proof, publicSignals } = await groth16.fullProve(
+    input,
+    "circuits/build/NullifierConsistency_js/NullifierConsistency.wasm",
+    "circuits/build/circuit_final.zkey"
+  );
+  const calldataStr: string = await groth16.exportSolidityCallData(
+    proof,
+    publicSignals
+  );
+  const calldata = calldataStr
+    .replace(/[\[\]\"]/g, "")
+    .split(",")
+    .slice(0, 8)
+    .map((x) => BigInt(x));
+  return calldata;
+}
 
 describe("ProofOfHumanitySemaphore", () => {
   async function deployContracts() {
@@ -30,10 +61,17 @@ describe("ProofOfHumanitySemaphore", () => {
     const GROUP_DEPTH = 20;
     const ZERO_VALUE = 0;
 
+    const NullifierConsistencyVerifier = await ethers.getContractFactory(
+      "NullifierConsistencyVerifier"
+    );
+    const nullifierConsistencyVerifier =
+      await NullifierConsistencyVerifier.deploy();
+
     const pohSemaphore = await ProofOfHumanitySemaphore.deploy(
       DEREGISTER_INCENTIVE,
       pohMock.address,
       semaphoreMock.address,
+      nullifierConsistencyVerifier.address,
       SEMAPHORE_GROUP_ID
     );
     await semaphoreMock.mock.createGroup
@@ -118,6 +156,105 @@ describe("ProofOfHumanitySemaphore", () => {
       )
         .to.emit(pohSemaphore, "IdentityCommitmentRegistered")
         .withArgs(otherAccount.address, identityCommitment);
+    });
+  });
+
+  describe("Verification", () => {
+    it("Should accept a valid proof pair", async () => {
+      const { semaphoreMock, pohSemaphore, otherAccount, SEMAPHORE_GROUP_ID } =
+        await loadFixture(deployContracts);
+
+      const proofInput = {
+        serviceNullifier: "3",
+        privIdentityNullifier: "5",
+        privRandomNonce: "7",
+        identityProxy:
+          "6785167652243325121502926540806452447443769108715415059349984576933636058888",
+        externalNullifier:
+          "10792109105659780501987979115125331313096686856714552667482248749787479314463",
+        nullifierHash:
+          "3979622137768783141887791456593217384977806412753183222556124011872149109142",
+      };
+      const nullifierConsistencyProofCalldata = await proveNullifierConsistency(
+        proofInput
+      );
+      const semaphoreProofCalldata = [0, 0, 0, 0, 0, 0, 0, 0];
+      const signal = ethers.utils.formatBytes32String("Hello World");
+      await semaphoreMock.mock.verifyProof
+        .withArgs(
+          SEMAPHORE_GROUP_ID,
+          signal,
+          proofInput.nullifierHash,
+          proofInput.externalNullifier,
+          semaphoreProofCalldata
+        )
+        .returns();
+      const transaction = pohSemaphore
+        .connect(otherAccount)
+        .verifyProof(
+          signal,
+          proofInput.nullifierHash,
+          proofInput.serviceNullifier,
+          proofInput.externalNullifier,
+          proofInput.identityProxy,
+          nullifierConsistencyProofCalldata,
+          semaphoreProofCalldata
+        );
+      await expect(transaction)
+        .to.emit(pohSemaphore, "ProofVerified")
+        .withArgs(
+          signal,
+          proofInput.nullifierHash,
+          proofInput.serviceNullifier,
+          proofInput.externalNullifier,
+          proofInput.identityProxy
+        );
+    });
+
+    it("Should revert for inconsistent nullifiers", async () => {
+      const { semaphoreMock, pohSemaphore, otherAccount, SEMAPHORE_GROUP_ID } =
+        await loadFixture(deployContracts);
+
+      const proofInput = {
+        serviceNullifier: "3",
+        privIdentityNullifier: "5",
+        privRandomNonce: "7",
+        identityProxy:
+          "6785167652243325121502926540806452447443769108715415059349984576933636058888",
+        externalNullifier:
+          "10792109105659780501987979115125331313096686856714552667482248749787479314463",
+        nullifierHash:
+          "3979622137768783141887791456593217384977806412753183222556124011872149109142",
+      };
+      const nullifierConsistencyProofCalldata = await proveNullifierConsistency(
+        proofInput
+      );
+      const semaphoreProofCalldata = [0, 0, 0, 0, 0, 0, 0, 0];
+      const signal = ethers.utils.formatBytes32String("Hello World");
+      const inconsistentIdentityProxy = "0";
+      await semaphoreMock.mock.verifyProof
+        .withArgs(
+          SEMAPHORE_GROUP_ID,
+          signal,
+          proofInput.nullifierHash,
+          proofInput.externalNullifier,
+          semaphoreProofCalldata
+        )
+        .returns();
+      const transaction = pohSemaphore
+        .connect(otherAccount)
+        .verifyProof(
+          signal,
+          proofInput.nullifierHash,
+          proofInput.serviceNullifier,
+          proofInput.externalNullifier,
+          inconsistentIdentityProxy,
+          nullifierConsistencyProofCalldata,
+          semaphoreProofCalldata
+        );
+      await expect(transaction).to.be.revertedWith(
+        "ProofOfHumanitySemaphore__InconsistentNullifiers()"
+      );
     });
   });
 });
