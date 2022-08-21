@@ -14,7 +14,8 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
     ISemaphore semaphore;
     IVerifier nullifierConsistencyVerifier;
     uint256 public semaphoreGroupId;
-    mapping(address => uint256) registeredIdentityCommitments;
+    mapping(address => uint256) addressToIdentityCommitment;
+    mapping(uint256 => address) identityCommitmentToAddress; // TODO: Remove once mapping is available via The Graph
 
     constructor(
         uint256 _deregisteringIncentive,
@@ -40,7 +41,7 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
         payable
     {
         address submissionId = msg.sender;
-        if (registeredIdentityCommitments[submissionId] != 0) {
+        if (addressToIdentityCommitment[submissionId] != 0) {
             revert ProofOfHumanitySemaphore__AlreadyRegistered();
         }
         if (!proofOfHumanity.isRegistered(submissionId)) {
@@ -50,7 +51,7 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
             revert ProofOfHumanitySemaphore__IncorrectPayment();
         }
         semaphore.addMember(semaphoreGroupId, identityCommitment);
-        registeredIdentityCommitments[submissionId] = identityCommitment;
+        addressToIdentityCommitment[submissionId] = identityCommitment;
         emit IdentityCommitmentRegistered(submissionId, identityCommitment);
     }
 
@@ -59,22 +60,21 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
         uint256[] calldata proofSiblings,
         uint8[] calldata proofPathIndices
     ) external {
-        if (registeredIdentityCommitments[submissionId] == 0) {
+        if (addressToIdentityCommitment[submissionId] == 0) {
             revert ProofOfHumanitySemaphore__RegistrationNotFound();
         }
         if (proofOfHumanity.isRegistered(submissionId)) {
             revert ProofOfHumanitySemaphore__RegistrationStillValid();
         }
-        uint256 identityCommitment = registeredIdentityCommitments[
-            submissionId
-        ];
+        uint256 identityCommitment = addressToIdentityCommitment[submissionId];
         semaphore.removeMember(
             semaphoreGroupId,
             identityCommitment,
             proofSiblings,
             proofPathIndices
         );
-        registeredIdentityCommitments[submissionId] = 0;
+        addressToIdentityCommitment[submissionId] = 0;
+        identityCommitmentToAddress[identityCommitment] = address(0);
         bool sent = payable(msg.sender).send(deregisteringIncentive);
         if (!sent) {
             revert ProofOfHumanitySemaphore__PaymentFailed();
