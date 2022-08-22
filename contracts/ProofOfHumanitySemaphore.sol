@@ -14,8 +14,8 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
     ISemaphore semaphore;
     IVerifier nullifierConsistencyVerifier;
     uint256 public semaphoreGroupId;
-    mapping(address => uint256) addressToIdentityCommitment;
-    mapping(uint256 => address) identityCommitmentToAddress; // TODO: Remove once mapping is available via The Graph
+    mapping(address => uint256) public addressToIdentityCommitment;
+    mapping(uint256 => address) public identityCommitmentToAddress; // TODO: Remove once mapping is available via The Graph
 
     constructor(
         uint256 _deregisteringIncentive,
