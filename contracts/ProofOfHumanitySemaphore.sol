@@ -52,6 +52,7 @@ contract ProofOfHumanitySemaphore is IProofOfHumanitySemaphore {
         }
         semaphore.addMember(semaphoreGroupId, identityCommitment);
         addressToIdentityCommitment[submissionId] = identityCommitment;
+        identityCommitmentToAddress[identityCommitment] = submissionId;
         emit IdentityCommitmentRegistered(submissionId, identityCommitment);
     }
 
