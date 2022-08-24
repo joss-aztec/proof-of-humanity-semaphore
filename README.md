@@ -4,6 +4,12 @@ A wrapper around the Proof of Humanity Protocol and Semaphore protocol for enabl
 
 ### Deployments
 
+#### Goerli
+
+[ProofOfHumanitySemaphore](https://goerli.etherscan.io/address/0x66da68cFBaED487Ff3044E3D12Ef47d89ff2e45f)
+
+[NullifierConsistencyVerifier](https://goerli.etherscan.io/address/0x26D3a8c7254f0Ce06f3417d30b2753e4CC3fCD4f)
+
 #### Kovan
 
 [ProofOfHumanitySemaphore](https://kovan.etherscan.io/address/0x3734638e20Ed2CCA1B99A73ffC7d37c966066EFE)

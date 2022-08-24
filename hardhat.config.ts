@@ -21,6 +21,11 @@ function getNetworks(): NetworksUserConfig | undefined {
         chainId: 42,
         accounts,
       },
+      goerli: {
+        url: `https://goerli.infura.io/v3/${infuraApiKey}`,
+        chainId: 5,
+        accounts,
+      },
     };
   }
 }
